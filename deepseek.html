@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kalkulator Modal Harian - Shift Pagi & Siang + Export Excel</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <!-- SheetJS (XLSX) untuk export Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --surface: #131929;
+      --surface2: #1a2236;
+      --border: #232f47;
+      --accent: #3b82f6;
+      --accent2: #06b6d4;
+      --gold: #f59e0b;
+      --green: #10b981;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --label: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    .page-wrapper { position: relative; z-index: 1; }
+
+    /* HEADER */
+    header {
+      background: linear-gradient(135deg, #0f1c35 0%, #0b0f1a 60%);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 0 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    .brand-text h1 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+    .brand-text p { font-size: 0.72rem; color: var(--muted); }
+
+    .date-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.78rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 14px;
+      color: var(--accent2);
+    }
+
+    /* SUMMARY CARDS */
+    .summary-strip {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .s-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+
+    .s-card.highlight {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, #1a2a50 0%, #131929 100%);
+    }
+
+    .s-card .s-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+    .s-card .s-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--green);
+    }
+    .s-card.total .s-value { color: var(--gold); font-size: 1.1rem; }
+    .s-card .s-icon { font-size: 1.1rem; margin-bottom: 4px; }
+
+    /* MAIN LAYOUT */
+    .main-content { padding: 28px 0; }
+
+    /* SECTION TITLE */
+    .section-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* CARD */
+    .calc-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .calc-card:hover { border-color: #2d4a7a; }
+
+    .calc-card .card-header-custom {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .bank-icon {
+      width: 38px; height: 38px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+      letter-spacing: -0.5px;
+      font-size: 0.7rem;
+    }
+
+    .bank-bca   { background: linear-gradient(135deg, #0057a8, #0080ff); }
+    .bank-bri   { background: linear-gradient(135deg, #003b8e, #0050b3); }
+    .bank-dana  { background: linear-gradient(135deg, #1677ff, #36abff); }
+    .bank-sea   { background: linear-gradient(135deg, #2d8653, #3cb371); }
+    .bank-mongo { background: linear-gradient(135deg, #7c3aed, #a855f7); }
+    .bank-kembalian { background: linear-gradient(135deg, #b45309, #f59e0b); }
+
+    .card-header-custom h6 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0;
+    }
+    .card-header-custom small { font-size: 0.68rem; color: var(--muted); }
+
+    .card-body-custom { padding: 18px 20px; }
+
+    /* INPUT GROUP */
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .input-row label {
+      font-size: 0.72rem;
+      color: var(--label);
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+    .input-wrap {
+      flex: 1;
+      position: relative;
+    }
+    .input-wrap .prefix {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      pointer-events: none;
+    }
+    .input-wrap input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px 9px 36px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.82rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .input-wrap input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    }
+    .input-wrap input::placeholder { color: var(--muted); }
+
+    /* NET RESULT inside card */
+    .net-result {
+      margin-top: 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .net-result .nr-label { font-size: 0.7rem; color: var(--muted); }
+    .net-result .nr-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: var(--green);
+    }
+    .net-result .nr-value.negative { color: var(--red); }
+
+    /* TARIK TUNAI SECTION */
+    .tarik-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .tarik-card .tc-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, #1a1a2e, var(--surface2));
+    }
+    .tarik-icon {
+      width: 38px; height: 38px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--red), #ff6b6b);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .tarik-card .tc-body { padding: 18px 20px; }
+
+    .tarik-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .tarik-item label { font-size: 0.72rem; color: var(--label); min-width: 90px; flex-shrink: 0; }
+
+    /* TOTAL PANEL */
+    .total-panel {
+      background: linear-gradient(135deg, #0f1e3d, #0a1628);
+      border: 1px solid #1e3a6e;
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .total-panel h5 {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .breakdown-row:last-of-type { border-bottom: none; }
+    .breakdown-row .br-label { font-size: 0.78rem; color: var(--label); display: flex; align-items: center; gap: 6px; }
+    .breakdown-row .br-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--text);
+    }
+
+    /* shift input custom row */
+    .shift-input-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .shift-label {
+      font-size: 0.78rem;
+      color: var(--label);
+      font-weight: 500;
+    }
+    .shift-field {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.8rem;
+      font-family: 'Plus Jakarta Sans', monospace;
+      width: 180px;
+      outline: none;
+    }
+    .shift-field:focus {
+      border-color: var(--accent);
+    }
+
+    .grand-total {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 2px solid #1e3a6e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .grand-total .gt-label { font-size: 0.85rem; font-weight: 700; color: #fff; }
+    .grand-total .gt-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 1.25rem;
+      font-weight: 500;
+      color: var(--gold);
+    }
+
+    /* RESET BTN */
+    .btn-calculate {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      letter-spacing: 0.3px;
+    }
+    .btn-calculate:active { transform: scale(0.97); }
+
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-reset:hover { border-color: var(--red); color: var(--red); }
+
+    .btn-excel {
+      background: transparent;
+      border: 1px solid #2e7d32;
+      border-radius: 10px;
+      color: #81c784;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-excel:hover {
+      background: #1b5e20;
+      border-color: #4caf50;
+      color: #fff;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* TIMESTAMP */
+    .timestamp {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    /* Badge net */
+    .badge-net {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-family: 'DM Mono', monospace;
+    }
+    .badge-pos { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-neg { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+    /* Responsive tweaks */
+    @media (max-width: 576px) {
+      .input-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+      .input-row label { min-width: unset; }
+      .tarik-item { flex-direction: column; align-items: flex-start; gap: 4px; }
+      .tarik-item label { min-width: unset; }
+      .grand-total .gt-value { font-size: 1rem; }
+      .shift-input-row { flex-direction: column; align-items: stretch; }
+      .shift-field { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="container">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-icon">💼</div>
+          <div class="brand-text">
+            <h1>Kalkulator Modal Harian</h1>
+            <p>Shift Pagi & Siang · Export Excel</p>
+          </div>
+        </div>
+        <div class="date-badge" id="headerDate">—</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- SUMMARY -->
+  <div class="summary-strip">
+    <div class="container">
+      <div class="summary-grid">
+        <div class="s-card">
+          <span class="s-icon">🏦</span>
+          <span class="s-label">Total Saldo Bank</span>
+          <span class="s-value" id="sumBank">Rp 0</span>
+        </div>
+        <div class="s-card">
+          <span class="s-icon">📲</span>
+          <span class="s-label">Total Saldo Digital</span>
+          <span class="s-value" id="sumDigital">Rp 0</span>
+        </div>
+        <div class="s-card">
+          <span class="s-icon">🔴</span>
+          <span class="s-label">Total Tarik Tunai</span>
+          <span class="s-value" id="sumTarik" style="color:var(--red)">Rp 0</span>
+        </div>
+        <div class="s-card">
+          <span class="s-icon">🔄</span>
+          <span class="s-label">Uang Kembalian</span>
+          <span class="s-value" id="sumKembalian" style="color:var(--accent2)">Rp 0</span>
+        </div>
+        <div class="s-card highlight total">
+          <span class="s-icon">💰</span>
+          <span class="s-label">TOTAL MODAL HARI INI</span>
+          <span class="s-value total" id="sumTotal">Rp 0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-content">
+    <div class="container">
+      <div class="row g-4">
+
+        <!-- KIRI: Bank & Dompet Digital -->
+        <div class="col-lg-7">
+
+          <!-- TARIK TUNAI -->
+          <div class="section-title">💸 Tarik Tunai</div>
+          <div class="tarik-card mb-4">
+            <div class="tc-header">
+              <div class="tarik-icon">💸</div>
+              <div>
+                <h6 style="font-size:0.85rem;font-weight:700;color:#fff;margin:0">Uang Tarik Tunai</h6>
+                <small style="font-size:0.68rem;color:var(--muted)">Jumlah uang yang ditarik dari ATM / kasir</small>
+              </div>
+            </div>
+            <div class="tc-body">
+              <div class="tarik-item"><label>Tarik Tunai BCA</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="tarikBca" placeholder="0" min="0" oninput="hitung()"/></div></div>
+              <div class="tarik-item"><label>Tarik Tunai BRI</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="tarikBri" placeholder="0" min="0" oninput="hitung()"/></div></div>
+              <div class="tarik-item"><label>Tarik Tunai DANA</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="tarikDana" placeholder="0" min="0" oninput="hitung()"/></div></div>
+              <div class="tarik-item"><label>Tarik Tunai SeaBank</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="tarikSea" placeholder="0" min="0" oninput="hitung()"/></div></div>
+              <div class="tarik-item"><label>Tarik Tunai Mongo</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="tarikMongo" placeholder="0" min="0" oninput="hitung()"/></div></div>
+            </div>
+          </div>
+
+          <!-- SALDO -->
+          <div class="section-title">🏦 Saldo Rekening & Dompet</div>
+          <div class="row g-3">
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-bca">BCA</div><div><h6>Bank BCA</h6><small>Saldo & tarik tunai</small></div></div><div class="card-body-custom"><div class="input-row"><label>Saldo Awal</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="saldoBca" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Sisa Saldo</span><span class="nr-value" id="netBca">Rp 0</span></div></div></div></div>
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-bri">BRI</div><div><h6>Bank BRI</h6><small>Saldo & tarik tunai</small></div></div><div class="card-body-custom"><div class="input-row"><label>Saldo Awal</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="saldoBri" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Sisa Saldo</span><span class="nr-value" id="netBri">Rp 0</span></div></div></div></div>
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-dana">DANA</div><div><h6>DANA</h6><small>Dompet digital</small></div></div><div class="card-body-custom"><div class="input-row"><label>Saldo Awal</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="saldoDana" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Sisa Saldo</span><span class="nr-value" id="netDana">Rp 0</span></div></div></div></div>
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-sea">SEA</div><div><h6>SeaBank</h6><small>Bank digital</small></div></div><div class="card-body-custom"><div class="input-row"><label>Saldo Awal</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="saldoSea" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Sisa Saldo</span><span class="nr-value" id="netSea">Rp 0</span></div></div></div></div>
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-mongo">MONGO</div><div><h6>MongoBank</h6><small>Bank digital</small></div></div><div class="card-body-custom"><div class="input-row"><label>Saldo Awal</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="saldoMongo" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Sisa Saldo</span><span class="nr-value" id="netMongo">Rp 0</span></div></div></div></div>
+            <div class="col-sm-6"><div class="calc-card"><div class="card-header-custom"><div class="bank-icon bank-kembalian">KMBLI</div><div><h6>Uang Kembalian</h6><small>Uang tunai di tangan</small></div></div><div class="card-body-custom"><div class="input-row"><label>Jumlah</label><div class="input-wrap"><span class="prefix">Rp</span><input type="number" id="kembalian" placeholder="0" min="0" oninput="hitung()"/></div></div><div class="net-result"><span class="nr-label">Di Tangan</span><span class="nr-value" id="netKembalian" style="color:var(--accent2)">Rp 0</span></div></div></div></div>
+          </div>
+        </div>
+
+        <!-- KANAN: Ringkasan, Shift & Export -->
+        <div class="col-lg-5">
+          <div class="section-title">📊 Ringkasan Hari Ini</div>
+          <div class="total-panel mb-4">
+            <h5>Detail Perhitungan Modal</h5>
+            <div class="breakdown-row"><span class="br-label"><span class="bank-icon bank-bca" style="width:18px;height:18px;font-size:0.5rem;border-radius:4px">BCA</span> Sisa BCA</span><span class="br-value" id="brkBca">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label"><span class="bank-icon bank-bri" style="width:18px;height:18px;font-size:0.5rem;border-radius:4px">BRI</span> Sisa BRI</span><span class="br-value" id="brkBri">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label"><span class="bank-icon bank-dana" style="width:18px;height:18px;font-size:0.5rem;border-radius:4px">DANA</span> Sisa DANA</span><span class="br-value" id="brkDana">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label"><span class="bank-icon bank-sea" style="width:18px;height:18px;font-size:0.5rem;border-radius:4px">SEA</span> Sisa SeaBank</span><span class="br-value" id="brkSea">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label"><span class="bank-icon bank-mongo" style="width:18px;height:18px;font-size:0.5rem;border-radius:4px">MNG</span> Sisa Mongo</span><span class="br-value" id="brkMongo">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label">🔄 Uang Kembalian</span><span class="br-value" id="brkKembalian">Rp 0</span></div>
+            <div class="grand-total"><span class="gt-label">💰 Total Modal</span><span class="gt-value" id="grandTotal">Rp 0</span></div>
+          </div>
+
+          <!-- SHIFT PAGI & SIANG (NAMA KASIR) -->
+          <div class="section-title">👥 Shift & Operator</div>
+          <div class="total-panel mb-4">
+            <h5>Nama Kasir per Shift</h5>
+            <div class="shift-input-row">
+              <span class="shift-label">🌅 Shift Pagi (Nama)</span>
+              <input type="text" id="shiftPagiNama" class="shift-field" placeholder="Contoh: Andi / Budi" autocomplete="off">
+            </div>
+            <div class="shift-input-row">
+              <span class="shift-label">🌇 Shift Siang (Nama)</span>
+              <input type="text" id="shiftSiangNama" class="shift-field" placeholder="Contoh: Siti / Dewi" autocomplete="off">
+            </div>
+            <div class="timestamp-info" style="font-size:0.7rem;color:var(--muted);margin-top:10px;">Masukkan nama operator untuk catatan export Excel</div>
+          </div>
+
+          <!-- Detail Tarik Tunai -->
+          <div class="section-title">💸 Detail Tarik Tunai</div>
+          <div class="total-panel mb-4">
+            <h5>Per Sumber</h5>
+            <div class="breakdown-row"><span class="br-label">BCA</span><span class="br-value" id="dtBca" style="color:var(--red)">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label">BRI</span><span class="br-value" id="dtBri" style="color:var(--red)">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label">DANA</span><span class="br-value" id="dtDana" style="color:var(--red)">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label">SeaBank</span><span class="br-value" id="dtSea" style="color:var(--red)">Rp 0</span></div>
+            <div class="breakdown-row"><span class="br-label">MongoBank</span><span class="br-value" id="dtMongo" style="color:var(--red)">Rp 0</span></div>
+            <div class="grand-total"><span class="gt-label" style="color:var(--red)">🔴 Total Ditarik</span><span class="gt-value" id="totalTarikDetail" style="color:var(--red)">Rp 0</span></div>
+          </div>
+
+          <!-- ACTION BUTTONS + EXPORT -->
+          <div class="btn-row mb-3">
+            <button class="btn-calculate" onclick="hitung()">🔄 Hitung Ulang</button>
+            <button class="btn-reset" onclick="resetSemua()">🗑 Reset</button>
+            <button class="btn-excel" onclick="exportToExcel()">📎 Export ke Excel</button>
+          </div>
+          <div class="timestamp" id="timestamp">Belum dihitung</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Format currency
+  const fmt = (n) => 'Rp ' + Math.abs(n).toLocaleString('id-ID');
+  const val = (id) => parseFloat(document.getElementById(id).value) || 0;
+  const set = (id, n, colored = true) => {
+    const el = document.getElementById(id);
+    el.textContent = (n < 0 ? '- ' : '') + fmt(n);
+    if (colored) {
+      el.style.color = n < 0 ? 'var(--red)' : 'var(--green)';
+    }
+  };
+
+  function hitung() {
+    // Saldo awal
+    const sBca   = val('saldoBca');
+    const sBri   = val('saldoBri');
+    const sDana  = val('saldoDana');
+    const sSea   = val('saldoSea');
+    const sMongo = val('saldoMongo');
+    const kemb   = val('kembalian');
+
+    // Tarik tunai
+    const tBca   = val('tarikBca');
+    const tBri   = val('tarikBri');
+    const tDana  = val('tarikDana');
+    const tSea   = val('tarikSea');
+    const tMongo = val('tarikMongo');
+
+    // Net saldo per akun
+    const nBca   = sBca   - tBca;
+    const nBri   = sBri   - tBri;
+    const nDana  = sDana  - tDana;
+    const nSea   = sSea   - tSea;
+    const nMongo = sMongo - tMongo;
+
+    // Update sisa saldo card
+    set('netBca',   nBca);
+    set('netBri',   nBri);
+    set('netDana',  nDana);
+    set('netSea',   nSea);
+    set('netMongo', nMongo);
+    document.getElementById('netKembalian').textContent = fmt(kemb);
+
+    // Breakdown sisa
+    set('brkBca',   nBca);
+    set('brkBri',   nBri);
+    set('brkDana',  nDana);
+    set('brkSea',   nSea);
+    set('brkMongo', nMongo);
+    document.getElementById('brkKembalian').textContent = fmt(kemb);
+
+    // Detail tarik
+    document.getElementById('dtBca').textContent   = fmt(tBca);
+    document.getElementById('dtBri').textContent   = fmt(tBri);
+    document.getElementById('dtDana').textContent  = fmt(tDana);
+    document.getElementById('dtSea').textContent   = fmt(tSea);
+    document.getElementById('dtMongo').textContent = fmt(tMongo);
+
+    const totalTarik = tBca + tBri + tDana + tSea + tMongo;
+    const totalBank  = (nBca > 0 ? nBca : 0) + (nBri > 0 ? nBri : 0);
+    const totalDig   = (nDana > 0 ? nDana : 0) + (nSea > 0 ? nSea : 0) + (nMongo > 0 ? nMongo : 0);
+    const grandTotal = nBca + nBri + nDana + nSea + nMongo + kemb;
+
+    // Summary strip
+    document.getElementById('sumBank').textContent     = fmt(sBca + sBri);
+    document.getElementById('sumDigital').textContent  = fmt(sDana + sSea + sMongo);
+    document.getElementById('sumTarik').textContent    = fmt(totalTarik);
+    document.getElementById('sumKembalian').textContent = fmt(kemb);
+    const sumTotalEl = document.getElementById('sumTotal');
+    sumTotalEl.textContent = (grandTotal < 0 ? '- ' : '') + fmt(grandTotal);
+    sumTotalEl.style.color = grandTotal < 0 ? 'var(--red)' : 'var(--gold)';
+
+    const gtEl = document.getElementById('grandTotal');
+    gtEl.textContent = (grandTotal < 0 ? '- ' : '') + fmt(grandTotal);
+    gtEl.style.color = grandTotal < 0 ? 'var(--red)' : 'var(--gold)';
+
+    document.getElementById('totalTarikDetail').textContent = fmt(totalTarik);
+
+    // Timestamp
+    const now = new Date();
+    document.getElementById('timestamp').textContent = 'Dihitung pada: ' + now.toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' });
+  }
+
+  function resetSemua() {
+    const ids = ['saldoBca','saldoBri','saldoDana','saldoSea','saldoMongo','kembalian',
+                 'tarikBca','tarikBri','tarikDana','tarikSea','tarikMongo'];
+    ids.forEach(id => document.getElementById(id).value = '');
+    hitung();
+    document.getElementById('timestamp').textContent = 'Belum dihitung';
+  }
+
+  // Export ke Excel (XLSX) dengan data shift + semua informasi keuangan
+  function exportToExcel() {
+    hitung(); // refresh agar data paling update
+    
+    const shiftPagi = document.getElementById('shiftPagiNama').value.trim() || '(tidak diisi)';
+    const shiftSiang = document.getElementById('shiftSiangNama').value.trim() || '(tidak diisi)';
+    const now = new Date();
+    const tanggalFormatted = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const jam = now.toLocaleTimeString('id-ID');
+    
+    // Kumpulkan data
+    const accounts = [
+      { nama: "BCA", saldoAwal: val('saldoBca'), tarik: val('tarikBca'), sisa: val('saldoBca') - val('tarikBca') },
+      { nama: "BRI", saldoAwal: val('saldoBri'), tarik: val('tarikBri'), sisa: val('saldoBri') - val('tarikBri') },
+      { nama: "DANA", saldoAwal: val('saldoDana'), tarik: val('tarikDana'), sisa: val('saldoDana') - val('tarikDana') },
+      { nama: "SeaBank", saldoAwal: val('saldoSea'), tarik: val('tarikSea'), sisa: val('saldoSea') - val('tarikSea') },
+      { nama: "MongoBank", saldoAwal: val('saldoMongo'), tarik: val('tarikMongo'), sisa: val('saldoMongo') - val('tarikMongo') }
+    ];
+    const uangKembalian = val('kembalian');
+    
+    const totalTarik = accounts.reduce((sum, acc) => sum + acc.tarik, 0);
+    const totalSisaBank = accounts.filter(a => a.nama === "BCA" || a.nama === "BRI").reduce((sum, a) => sum + (a.sisa > 0 ? a.sisa : 0), 0);
+    const totalSisaDigital = accounts.filter(a => a.nama !== "BCA" && a.nama !== "BRI").reduce((sum, a) => sum + (a.sisa > 0 ? a.sisa : 0), 0);
+    const grandTotal = accounts.reduce((sum, a) => sum + a.sisa, 0) + uangKembalian;
+    
+    // Buat worksheet data
+    const excelData = [];
+    excelData.push(["LAPORAN MODAL HARIAN - SHIFT PAGI & SIANG"]);
+    excelData.push(["Tanggal", tanggalFormatted, "Jam", jam]);
+    excelData.push([]);
+    excelData.push(["DATA SHIFT", ""]);
+    excelData.push(["Shift Pagi (Nama)", shiftPagi]);
+    excelData.push(["Shift Siang (Nama)", shiftSiang]);
+    excelData.push([]);
+    excelData.push(["RINCIAN PER REKENING / DOMPET", "", "", ""]);
+    excelData.push(["Akun", "Saldo Awal (Rp)", "Tarik Tunai (Rp)", "Sisa Saldo (Rp)"]);
+    accounts.forEach(acc => {
+      excelData.push([acc.nama, acc.saldoAwal, acc.tarik, acc.sisa]);
+    });
+    excelData.push(["Uang Kembalian (tunai)", "", "", uangKembalian]);
+    excelData.push([]);
+    excelData.push(["RINGKASAN TOTAL", ""]);
+    excelData.push(["Total Tarik Tunai Semua Sumber", totalTarik]);
+    excelData.push(["Total Saldo Bank (Sisa BCA+BRI)", totalSisaBank]);
+    excelData.push(["Total Saldo Digital (Sisa DANA+SeaBank+Mongo)", totalSisaDigital]);
+    excelData.push(["Grand Total Modal (Sisa semua + Kembalian)", grandTotal]);
+    excelData.push([]);
+    excelData.push(["Catatan: Sisa negatif menandakan tarik melebihi saldo", " "]);
+    excelData.push(["Dihitung pada : ", now.toLocaleString('id-ID')]);
+    
+    // Buat workbook
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+    ws['!cols'] = [{wch:22},{wch:18},{wch:15},{wch:18}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Laporan_Modal_Harian");
+    XLSX.writeFile(wb, `Modal_Harian_${now.toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
+  }
+  
+  // Set date header
+  function setDate() {
+    const now = new Date();
+    document.getElementById('headerDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  setDate();
+  hitung();
+</script>
+</body>
+</html>
